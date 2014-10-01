@@ -28,14 +28,14 @@ import os.path
 import sys
 import time
 import glob
-import pwd
 
 import numpy
 
 import theano
 import theano.tensor as T
-#from theano.tensor.signal import downsample
-#from theano.tensor.nnet import conv
+
+from theano.tensor.signal import downsample
+from theano.tensor.nnet import conv
 from theano.sandbox.cuda.basic_ops import gpu_contiguous
 from pylearn2.sandbox.cuda_convnet.filter_acts import FilterActs
 from pylearn2.sandbox.cuda_convnet.pool import MaxPool
@@ -49,7 +49,12 @@ from boto.sqs.message import RawMessage
 import boto.sqs
 
 from random import random
+from ConfigParser import SafeConfigParser
 
+parser = SafeConfigParser()
+parser.read('config.ini')
+messages=parser.getboolean('config', 'messages')
+cuda=parser.getboolean('config', 'cuda')
 queue = None
 
 class LeNetConvPoolLayer(object):
@@ -106,21 +111,25 @@ class LeNetConvPoolLayer(object):
 		self.b = b
 
         # convolve input feature maps with filters
-        #conconv_out = conv.conv2d(input=input, filters=self.W,
-        #        filter_shape=filter_shape, image_shape=image_shape)
-	input_shuffled = input.dimshuffle(1, 2, 3, 0) # bc01 to c01b
-	filters_shuffled = self.W.dimshuffle(1, 2, 3, 0) # bc01 to c01b
-	conv_op = FilterActs(stride=1, partial_sum=1)
-	contiguous_input = gpu_contiguous(input_shuffled)
-	contiguous_filters = gpu_contiguous(filters_shuffled)
-	conv_out_shuffled = conv_op(contiguous_input, contiguous_filters)
+	if not cuda:
+		conv_out = conv.conv2d(input=input, filters=self.W,
+			filter_shape=filter_shape, image_shape=image_shape)
+	else:
+		input_shuffled = input.dimshuffle(1, 2, 3, 0) # bc01 to c01b
+		filters_shuffled = self.W.dimshuffle(1, 2, 3, 0) # bc01 to c01b
+		conv_op = FilterActs(stride=1, partial_sum=1)
+		contiguous_input = gpu_contiguous(input_shuffled)
+		contiguous_filters = gpu_contiguous(filters_shuffled)
+		conv_out_shuffled = conv_op(contiguous_input, contiguous_filters)
 	
         # downsample each feature map individually, using maxpooling
-        #pooled_out = downsample.max_pool_2d(input=conv_out,
-        #                                    ds=poolsize, ignore_border=True)
-	pool_op = MaxPool(ds=poolsize[0], stride=poolsize[0])
-	pooled_out_shuffled = pool_op(conv_out_shuffled)
-	pooled_out = pooled_out_shuffled.dimshuffle(3, 0, 1, 2) # c01b to bc01
+	if not cuda:
+		pooled_out = downsample.max_pool_2d(input=conv_out,
+                                            ds=poolsize, ignore_border=True)
+	else:
+		pool_op = MaxPool(ds=poolsize[0], stride=poolsize[0])
+		pooled_out_shuffled = pool_op(conv_out_shuffled)
+		pooled_out = pooled_out_shuffled.dimshuffle(3, 0, 1, 2) # c01b to bc01
 	
         # add the bias term. Since the bias is a vector (1D array), we first
         # reshape it to a tensor of shape (1,n_filters,1,1). Each bias will
@@ -200,10 +209,11 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 		  'with test performance %f %%' % (best_validation_loss * 100., best_iter + 1, test_score * 100.))
 	    m+='Loaded previous epoch best validation score of %f%%\n\tobtained at iteration %i, '\
 		  'with test performance %f %%' % (best_validation_loss * 100., best_iter + 1, test_score * 100.)
-    if m!="":
-	raw_message = RawMessage()
-	raw_message.set_body(m)
-	queue.write(raw_message)
+    if messages:
+	    if m!="":
+		raw_message = RawMessage()
+		raw_message.set_body(m)
+		queue.write(raw_message)
 	
     # Reshape matrix of rasterized images of shape (batch_size,28*28)
     # to a 4D tensor, compatible with our LeNetConvPoolLayer
@@ -351,9 +361,10 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 		    f=open("best.pickle", "wb")
 		    cPickle.dump((best_params, best_validation_loss, best_iter, test_score), f)
 		    f.close()
-		raw_message = RawMessage()
-		raw_message.set_body(m)
-		queue.write(raw_message)
+		if messages:
+			raw_message = RawMessage()
+			raw_message.set_body(m)
+			queue.write(raw_message)
 
             if  (train_losses<0.01): #(patience <= iter)
                 done_looping = True
@@ -375,9 +386,10 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((net_run_time+end_time - start_time) / 60.))
     print(m)
-    raw_message = RawMessage()
-    raw_message.set_body(m)
-    queue.write(raw_message)    
+    if messages:
+	    raw_message = RawMessage()
+	    raw_message.set_body(m)
+	    queue.write(raw_message)    
 
 class LogisticRegression(object):
     """Multi-class Logistic Regression Class
@@ -483,115 +495,90 @@ class LogisticRegression(object):
             raise NotImplementedError()
 
 def load_data():
-    ''' Loads the dataset
+	''' Loads the dataset
 
-    :type dataset: string
-    :param dataset: the path to the dataset (here MNIST)
-    '''
+	:type dataset: string
+	:param dataset: the path to the dataset (here MNIST)
+	'''
 
-    #############
-    # LOAD DATA #
-    #############
-    print 'loading training data'
+	#############
+	# LOAD DATA #
+	#############
+	print 'loading training data'
 
-    u=pwd.getpwuid(os.getuid())[0]
-    # Load the datasets
-    '''
-    d=None
-    l=None
-    for file in glob.glob('/home/'+u+'/cifar-10-batches-py/data_batch_*'):
-	f=open(file,'rb')
-	dict = cPickle.load(f)
-	if d is None and l is None:
-		d=dict["data"]
-		l=dict["labels"]
-	else:
-		d=numpy.vstack((d,dict["data"]))
-		l=l+dict["labels"]
+	# Load the datasets
+
+	validation_divide=parser.getint('config', 'validation_divide')
+	f=open(parser.get('config', 'train_labels'))
+	l=cPickle.load(f)
 	f.close()
-    '''
-    d=serial.load('/home/'+u+'/cifar10/pylearn2_gcn_whitened/train.npy')
-    f=open('/home/'+u+'/cifar10/train.pkl')
-    l=cPickle.load(f)
-    #train_set = (numpy.asfarray(d[:,0:3072], dtype='float64')/256, l)    
-    dnet=d[:40000][:]
-    lnet=l[:40000]
-    valid_set = (d[40000:][:], numpy.asarray(l[40000:]))
+	d=serial.load(parser.get('config', 'train_file_1'))
+	dnet=d[:validation_divide][:]
+	lnet=l[:validation_divide]
 
-    d=serial.load('/home/'+u+'/cifar10/pylearn2_gcn_whitened/train_d.npy')
-    dnet=numpy.vstack((dnet,d[:40000][:]))
-    lnet=lnet+l[:40000]
-    '''d=serial.load('/home/'+u+'/cifar10/pylearn2_gcn_whitened/train_tp.npy')
-    dnet=numpy.vstack((dnet,d[:40000][:]))
-    lnet=lnet+l[:40000]
-    d=serial.load('/home/'+u+'/cifar10/pylearn2_gcn_whitened/train_tn.npy')
-    dnet=numpy.vstack((dnet,d[:40000][:]))
-    lnet=lnet+l[:40000]'''
-    
-    train_set = (dnet, numpy.asarray(lnet))
-    print 'loaded training and validation data'
+	valid_set = (d[validation_divide:][:], numpy.asarray(l[validation_divide:]))
 
-    '''print 'loading validation data...'
-    f=open('/home/'+u+'/cifar-10-batches-py/validation/data_batch_5','rb')
-    dict = cPickle.load(f)
-    f.close();
-    d=dict["data"]
-    '''
+	train_file_count=parser.getint('config', 'train_file_count')
+	for i in range(1,train_file_count):
+		d=serial.load(parser.get('config', 'train_file_'+str(i)))
+		dnet=numpy.vstack((dnet,d[:validation_divide][:]))
+		lnet=lnet+l[:validation_divide]
+	
+	train_set = (dnet, numpy.asarray(lnet))
 
-    print 'loading test data...'
-    f=open('/home/'+u+'/cifar-10-batches-py/test_batch','rb')
-    dict = cPickle.load(f)
-    f.close();
-    #d=dict["data"]
-    #test_set = (numpy.asfarray(d[:,0:3072], dtype='float64')/256, numpy.asarray(dict["labels"]))
-    d=serial.load('/home/'+u+'/cifar10/pylearn2_gcn_whitened/test.npy')
-    test_set = (d, numpy.asarray(dict["labels"]))
-    
-    def shared_dataset(data_xy, borrow=True):
-        """ Function that loads the dataset into shared variables
+	print 'loaded training and validation data'
 
-        The reason we store our dataset in shared variables is to allow
-        Theano to copy it into the GPU memory (when code is run on GPU).
-        Since copying data into the GPU is slow, copying a minibatch everytime
-        is needed (the default behaviour if the data is not in a shared
-        variable) would lead to a large decrease in performance.
-        """
-        data_x, data_y = data_xy
-        shared_x = theano.shared(numpy.asarray(data_x,
-                                               dtype=theano.config.floatX),
-                                 borrow=borrow)
-        shared_y = theano.shared(numpy.asarray(data_y,
-                                               dtype=theano.config.floatX),
-                                 borrow=borrow)
-        return shared_x, T.cast(shared_y, 'int32')
+	print 'loading test data...'
+	f=open(parser.get('config', 'test_labels'))
+	l = cPickle.load(f)
+	f.close();
+	d=serial.load(parser.get('config', 'test_file'))
+	test_set = (d, numpy.asarray(l))
 
-    test_set_x, test_set_y = shared_dataset(test_set)
-    valid_set_x, valid_set_y = shared_dataset(valid_set)
-    train_set_x, train_set_y = shared_dataset(train_set)
+	def shared_dataset(data_xy, borrow=True):
+		data_x, data_y = data_xy
+		shared_x = theano.shared(numpy.asarray(data_x,
+						       dtype=theano.config.floatX),
+					 borrow=borrow)
+		shared_y = theano.shared(numpy.asarray(data_y,
+						       dtype=theano.config.floatX),
+					 borrow=borrow)
+		return shared_x, T.cast(shared_y, 'int32')
 
-    rval = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
-            (test_set_x, test_set_y)]
-    print 'all data now loaded. let the games begin.'
-    return rval
+	test_set_x, test_set_y = shared_dataset(test_set)
+	valid_set_x, valid_set_y = shared_dataset(valid_set)
+	train_set_x, train_set_y = shared_dataset(train_set)
+
+	rval = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
+	    (test_set_x, test_set_y)]
+	print 'all data now loaded. let the games begin.'
+	return rval
 
 if __name__ == '__main__':
 
-	conn = boto.sqs.connect_to_region(
-		"us-east-1")
-	queue = conn.get_queue('LearningMessages')
-	print 'connected to messaging queue'
+	if messages:
+		conn = boto.sqs.connect_to_region(
+			"us-east-1")
+		queue = conn.get_queue('LearningMessages')
+		print 'connected to messaging queue'
 	
-	initial_learning_rate=0.1; learning_decay=0.96; learning_rate_min=0.0075; 
-	lambada=0.0085; 
-	nkerns=[64,128,256]; 
-	n_epochs=250; batch_size=100;
+	initial_learning_rate=parser.getfloat('config', 'initial_learning_rate')
+	learning_decay=parser.getfloat('config', 'learning_decay')
+	learning_rate_min=parser.getfloat('config', 'learning_rate_min')
+	lambada=parser.getfloat('config', 'lambada')
+	nkerns_shape=parser.getint('config', 'nkerns_shape')
+	nkerns=[]
+	for i in range(0,nkerns_shape):
+		nkerns+=[parser.getint('config', 'nkerns_'+str(i))]
+	n_epochs=parser.getint('config', 'n_epochs')
+	batch_size=parser.getint('config', 'batch_size')
 	
 	m="Greetings. Hydra is now online.\n"
 	m+="Config:\n"
 	m+="learning: %.4f/%.4f/%.4f\n"%(initial_learning_rate, learning_decay, learning_rate_min)
 	m+="lambada: %4f\n"%lambada
 	m+="kernels: "
-	for k in range(0,len(nkerns)-1):
+	for k in range(0,len(nkerns)):
 		m+=str(nkerns[k])+" "
 	m+="\nbatch size: %i\n"%batch_size
 	m+="epochs: %i\n"%n_epochs
@@ -611,9 +598,10 @@ if __name__ == '__main__':
 		print 'loaded best model configuration for previous epoch'
 		m+='\nloaded best model configuration for previous epoch'
 
-	raw_message = RawMessage()
-	raw_message.set_body(m)
-	queue.write(raw_message)
+	if messages:
+		raw_message = RawMessage()
+		raw_message.set_body(m)
+		queue.write(raw_message)
 		
 		
 	evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns,
