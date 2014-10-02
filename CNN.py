@@ -585,18 +585,20 @@ if __name__ == '__main__':
 
 	epoch_data = None
 	best_data = None
-	if os.path.isfile("epoch.pickle"):
-		f=open("epoch.pickle")
-		epoch_data = cPickle.load(f)
-		f.close()
-		print 'loaded last model configuration from previous epoch'
-		m+='\nloaded last model configuration from previous epoch'
-	if os.path.isfile("best.pickle"):
-		f=open("best.pickle")
-		best_data = cPickle.load(f)
-		f.close()
-		print 'loaded best model configuration for previous epoch'
-		m+='\nloaded best model configuration for previous epoch'
+	
+	if parser.getboolean('config', 'resume'):
+		if os.path.isfile("epoch.pickle"):
+			f=open("epoch.pickle")
+			epoch_data = cPickle.load(f)
+			f.close()
+			print 'loaded last model configuration from previous epoch'
+			m+='\nloaded last model configuration from previous epoch'
+		if os.path.isfile("best.pickle"):
+			f=open("best.pickle")
+			best_data = cPickle.load(f)
+			f.close()
+			print 'loaded best model configuration for previous epoch'
+			m+='\nloaded best model configuration for previous epoch'
 
 	if messages:
 		raw_message = RawMessage()
