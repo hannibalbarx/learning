@@ -55,6 +55,9 @@ from ConfigParser import SafeConfigParser
 
 parser = SafeConfigParser()
 parser.read('config.ini')
+if parser.getboolean('config', 'exit'):
+	print 'why you no love me? bye.'
+	exit()
 messages=parser.getboolean('config', 'messages')
 cuda=parser.getboolean('config', 'cuda')
 queue = None
