@@ -146,6 +146,66 @@ class LeNetConvPoolLayer(object):
         # store parameters of this layer
         self.params = [self.W, self.b]
 
+class LeNetConvLayer(object):
+    """Pool Layer of a convolutional network """
+
+    def __init__(self, rng, input, filter_shape, image_shape, W=None):
+        """
+        Allocate a LeNetConvPoolLayer with shared variable internal parameters.
+
+        :type rng: numpy.random.RandomState
+        :param rng: a random number generator used to initialize weights
+
+        :type input: theano.tensor.dtensor4
+        :param input: symbolic image tensor, of shape image_shape
+
+        :type filter_shape: tuple or list of length 4
+        :param filter_shape: (number of filters, num input feature maps,
+                              filter height,filter width)
+
+        :type image_shape: tuple or list of length 4
+        :param image_shape: (batch size, num input feature maps,
+                             image height, image width)
+
+        :type poolsize: tuple or list of length 2
+        :param poolsize: the downsampling (pooling) factor (#rows,#cols)
+        """
+
+        assert image_shape[1] == filter_shape[1]
+        self.input = input
+
+        # there are "num input feature maps * filter height * filter width"
+        # inputs to each hidden unit
+        fan_in = numpy.prod(filter_shape[1:])
+        # each unit in the lower layer receives a gradient from:
+        # "num output feature maps * filter height * filter width" /
+        #   pooling size
+        fan_out = (filter_shape[0] * numpy.prod(filter_shape[2:]))
+        # initialize weights with random weights
+        W_bound = numpy.sqrt(6. / (fan_in + fan_out))
+        if W is None:
+		self.W = theano.shared(numpy.asarray(
+			rng.uniform(low=-W_bound, high=W_bound, size=filter_shape),
+			dtype=theano.config.floatX),
+                               borrow=True)
+	else:
+		self.W = W
+
+        # convolve input feature maps with filters
+	if not cuda:
+		self.output = conv.conv2d(input=input, filters=self.W,
+			filter_shape=filter_shape, image_shape=image_shape)
+	else:
+		input_shuffled = input.dimshuffle(1, 2, 3, 0) # bc01 to c01b
+		filters_shuffled = self.W.dimshuffle(1, 2, 3, 0) # bc01 to c01b
+		conv_op = FilterActs(stride=1, partial_sum=1)
+		contiguous_input = gpu_contiguous(input_shuffled)
+		contiguous_filters = gpu_contiguous(filters_shuffled)
+		self.output = conv_op(contiguous_input, contiguous_filters).dimshuffle(3, 0, 1, 2)
+	
+        # store parameters of this layer
+        self.params = [self.W]
+
 def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns,
 	epoch_data = None, best_data = None,
 	n_epochs=250, batch_size=100):
@@ -178,6 +238,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     print '... building the model'
 
     W_0 = None; b_0 = None;
+    W_0_0 = None
     W_1 = None; b_1 = None;
     W_1_1 = None; b_1_1 = None;
     W_2 = None; b_2 = None;
@@ -192,7 +253,8 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     
     m=""
     if epoch_data is not None:
-	    W_0 = epoch_data[0][8]; b_0 = epoch_data[0][9];
+	    W_0 = epoch_data[0][9]; b_0 = epoch_data[0][10];
+	    W_0_0 = epoch_data[0][8]
 	    W_1 = epoch_data[0][6]; b_1 = epoch_data[0][7];
 	    W_1_1 = epoch_data[0][4]; b_1_1 = epoch_data[0][5];
 	    W_2 = epoch_data[0][2]; b_2 = epoch_data[0][3];
@@ -228,19 +290,22 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # filtering reduces the image size to (28-5+1,28-5+1)=(24,24)
     # maxpooling reduces this further to (24/2,24/2) = (12,12)
     # 4D output tensor is thus of shape (batch_size,nkerns[0],12,12)
-    layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
+    layer0 = LeNetConvLayer(rng, input=layer0_input,
             image_shape=(batch_size, 3, 32, 32),
-            filter_shape=(nkerns[0], 3, 3, 3), poolsize=(2, 2), W=W_0, b=b_0)
+            filter_shape=(nkerns[0], 3, 3, 3), W=W_0)
+    layer0_0 = LeNetConvLayer(rng, input=layer0.output,
+            image_shape=(batch_size, nkerns[0], 30, 30),
+            filter_shape=(nkerns[0], nkerns[0], 3, 3), W=W_0_0)
 
     # Construct the second convolutional pooling layer
     # filtering reduces the image size to (12-5+1,12-5+1)=(8,8)
     # maxpooling reduces this further to (8/2,8/2) = (4,4)
     # 4D output tensor is thus of shape (nkerns[0],nkerns[1],4,4)
-    layer1 = LeNetConvPoolLayer(rng, input=layer0.output,
-            image_shape=(batch_size, nkerns[0], 15, 15),
-            filter_shape=(nkerns[1], nkerns[0], 2, 2), poolsize=(2, 2), W=W_1, b=b_1)
+    layer1 = LeNetConvPoolLayer(rng, input=layer0_0.output,
+            image_shape=(batch_size, nkerns[0], 28, 28),
+            filter_shape=(nkerns[1], nkerns[0], 3, 3), poolsize=(2, 2), W=W_1, b=b_1)
     layer1_1 = LeNetConvPoolLayer(rng, input=layer1.output,
-            image_shape=(batch_size, nkerns[1], 7, 7),
+            image_shape=(batch_size, nkerns[1], 13, 13),
             filter_shape=(nkerns[2], nkerns[1], 2, 2), poolsize=(2, 2), W=W_1_1, b=b_1_1)
 
     # the HiddenLayer being fully-connected, it operates on 2D matrices of
@@ -249,14 +314,14 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     layer2_input = layer1_1.output.flatten(2)
 
     # construct a fully-connected sigmoidal layer
-    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 3 * 3,
+    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 6 * 6,
                          n_out=500, activation=T.tanh, W=W_2, b=b_2)
 
     # classify the values of the fully-connected sigmoidal layer
     layer3 = LogisticRegression(input=layer2.output, n_in=500, n_out=10, W=W_3, b=b_3)
 
-    params = layer3.params + layer2.params + layer1_1.params +layer1.params + layer0.params
-    L2 = 	(layer0.W**2).sum() + (layer1.W**2).sum() \
+    params = layer3.params + layer2.params + layer1_1.params +layer1.params + layer0_0.params + layer0.params
+    L2 = 	(layer0.W**2).sum() + (layer0_0.W**2).sum() + (layer1.W**2).sum() \
 		+(layer2.W**2).sum()+(layer3.W**2).sum()
 		
     t_learning_rate_min = theano.shared(numpy.float32(learning_rate_min))
