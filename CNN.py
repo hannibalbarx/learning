@@ -237,7 +237,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     ######################
     print '... building the model'
 
-    W_0 = None; b_0 = None;
+    W_0 = None #; b_0 = None;
     W_0_0 = None
     W_1 = None; b_1 = None;
     W_1_1 = None; b_1_1 = None;
@@ -253,7 +253,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     
     m=""
     if epoch_data is not None:
-	    W_0 = epoch_data[0][9]; b_0 = epoch_data[0][10];
+	    W_0 = epoch_data[0][9] #; b_0 = epoch_data[0][10];
 	    W_0_0 = epoch_data[0][8]
 	    W_1 = epoch_data[0][6]; b_1 = epoch_data[0][7];
 	    W_1_1 = epoch_data[0][4]; b_1_1 = epoch_data[0][5];
