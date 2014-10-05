@@ -313,12 +313,14 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # This will generate a matrix of shape (20,32*4*4) = (20,512)
     layer2_input = layer1_1.output.flatten(2)
 
+    hnn_1 = parser.getint('config', 'hnn_1')
+
     # construct a fully-connected sigmoidal layer
     layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 6 * 6,
-                         n_out=96, activation=T.tanh, W=W_2, b=b_2)
+                         n_out=hnn_1, activation=T.tanh, W=W_2, b=b_2)
 
     # classify the values of the fully-connected sigmoidal layer
-    layer3 = LogisticRegression(input=layer2.output, n_in=96, n_out=10, W=W_3, b=b_3)
+    layer3 = LogisticRegression(input=layer2.output, n_in=hnn_1, n_out=10, W=W_3, b=b_3)
 
     params = layer3.params + layer2.params + layer1_1.params +layer1.params + layer0_0.params + layer0.params
     L2 = 	(layer0.W**2).sum() + (layer0_0.W**2).sum() + (layer1.W**2).sum() \
