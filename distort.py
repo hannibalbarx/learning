@@ -15,8 +15,8 @@ def getpx_t(file):
 	dtp=dtp.reshape((50000,3072))
 	dtn=dtn.reshape((50000,3072))
 	
-	serial.save("tp_"+file,dtp)
-	serial.save("tn_"+file,dtn)
+	serial.save(file+"_tp",dtp)
+	serial.save(file+"_tn",dtn)
 
 def getpx_r(file):
 	d = serial.load(file)
@@ -27,7 +27,7 @@ def getpx_r(file):
 			d[i,j]=numpy.fliplr(d[i,j])
 	d=d.reshape((50000,3072))
 	
-	serial.save("r_"+file,d)
+	serial.save(file+"_r",d)
 
 def shower(m):
     im = Image.new("RGB", m[0].shape, "white")
