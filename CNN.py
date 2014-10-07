@@ -486,16 +486,20 @@ def load_data():
 	l=cPickle.load(f)
 	f.close()
 	d=serial.load(parser.get('config', 'train_file_1'))
-	dnet=d[:validation_divide][:]
-	lnet=l[:validation_divide]
+	#dnet=d[:validation_divide][:]
+	#lnet=l[:validation_divide]
+	dnet=d
+	lnet=l
 
 	valid_set = (d[validation_divide:][:], numpy.asarray(l[validation_divide:]))
 
 	train_file_count=parser.getint('config', 'train_file_count')
 	for i in range(1,train_file_count):
 		d=serial.load(parser.get('config', 'train_file_'+str(i)))
-		dnet=numpy.vstack((dnet,d[:validation_divide][:]))
-		lnet=lnet+l[:validation_divide]
+		#dnet=numpy.vstack((dnet,d[:validation_divide][:]))
+		#lnet=lnet+l[:validation_divide]
+		dnet=numpy.vstack((dnet,d))
+		lnet=lnet+l
 	
 	train_set = (dnet, numpy.asarray(lnet))
 
