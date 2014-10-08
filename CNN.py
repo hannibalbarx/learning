@@ -237,8 +237,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     ######################
     print '... building the model'
 
-    W_0 = None #; b_0 = None;
-    W_0_0 = None
+    W_0 = None ; b_0 = None;
     W_1 = None; b_1 = None;
     W_1_1 = None; b_1_1 = None;
     W_2 = None; b_2 = None;
@@ -253,8 +252,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     
     m=""
     if epoch_data is not None:
-	    W_0 = epoch_data[0][9] #; b_0 = epoch_data[0][10];
-	    W_0_0 = epoch_data[0][8]
+	    W_0 = epoch_data[0][8] ; b_0 = epoch_data[0][9];
 	    W_1 = epoch_data[0][6]; b_1 = epoch_data[0][7];
 	    W_1_1 = epoch_data[0][4]; b_1_1 = epoch_data[0][5];
 	    W_2 = epoch_data[0][2]; b_2 = epoch_data[0][3];
@@ -290,22 +288,19 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # filtering reduces the image size to (28-5+1,28-5+1)=(24,24)
     # maxpooling reduces this further to (24/2,24/2) = (12,12)
     # 4D output tensor is thus of shape (batch_size,nkerns[0],12,12)
-    layer0 = LeNetConvLayer(rng, input=layer0_input,
+    layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
             image_shape=(batch_size, 3, 32, 32),
-            filter_shape=(nkerns[0], 3, 3, 3), W=W_0)
-    layer0_0 = LeNetConvLayer(rng, input=layer0.output,
-            image_shape=(batch_size, nkerns[0], 30, 30),
-            filter_shape=(nkerns[0], nkerns[0], 3, 3), W=W_0_0)
+            filter_shape=(nkerns[0], 3, 3, 3), poolsize=(2, 2), W=W_0, b=b_0)
 
     # Construct the second convolutional pooling layer
     # filtering reduces the image size to (12-5+1,12-5+1)=(8,8)
     # maxpooling reduces this further to (8/2,8/2) = (4,4)
     # 4D output tensor is thus of shape (nkerns[0],nkerns[1],4,4)
-    layer1 = LeNetConvPoolLayer(rng, input=layer0_0.output,
-            image_shape=(batch_size, nkerns[0], 28, 28),
-            filter_shape=(nkerns[1], nkerns[0], 3, 3), poolsize=(2, 2), W=W_1, b=b_1)
+    layer1 = LeNetConvPoolLayer(rng, input=layer0.output,
+            image_shape=(batch_size, nkerns[0], 15, 15),
+            filter_shape=(nkerns[1], nkerns[0], 2, 2), poolsize=(2, 2), W=W_1, b=b_1)
     layer1_1 = LeNetConvPoolLayer(rng, input=layer1.output,
-            image_shape=(batch_size, nkerns[1], 13, 13),
+            image_shape=(batch_size, nkerns[1], 7, 7),
             filter_shape=(nkerns[2], nkerns[1], 2, 2), poolsize=(2, 2), W=W_1_1, b=b_1_1)
 
     # the HiddenLayer being fully-connected, it operates on 2D matrices of
@@ -316,14 +311,14 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     hnn_1 = parser.getint('config', 'hnn_1')
 
     # construct a fully-connected sigmoidal layer
-    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 6 * 6,
+    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 3 * 3,
                          n_out=hnn_1, activation=T.tanh, W=W_2, b=b_2)
 
     # classify the values of the fully-connected sigmoidal layer
     layer3 = LogisticRegression(input=layer2.output, n_in=hnn_1, n_out=10, W=W_3, b=b_3)
 
-    params = layer3.params + layer2.params + layer1_1.params +layer1.params + layer0_0.params + layer0.params
-    L2 = 	(layer0.W**2).sum() + (layer0_0.W**2).sum() + (layer1.W**2).sum() \
+    params = layer3.params + layer2.params + layer1_1.params +layer1.params + layer0.params
+    L2 = 	(layer0.W**2).sum() + (layer1.W**2).sum() + (layer1_1.W**2).sum()\
 		+(layer2.W**2).sum()+(layer3.W**2).sum()
 		
     t_learning_rate_min = theano.shared(numpy.float32(learning_rate_min))
