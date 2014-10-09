@@ -476,25 +476,30 @@ def load_data():
 
 	# Load the datasets
 
+	validation_train=parser.getboolean('config', 'validation_train')
 	validation_divide=parser.getint('config', 'validation_divide')
 	f=open(parser.get('config', 'train_labels'))
 	l=cPickle.load(f)
 	f.close()
 	d=serial.load(parser.get('config', 'train_file_1'))
-	#dnet=d[:validation_divide][:]
-	#lnet=l[:validation_divide]
-	dnet=d
-	lnet=l
+	if validation_train:
+		dnet=d
+		lnet=l
+	else:
+		dnet=d[:validation_divide][:]
+		lnet=l[:validation_divide]
 
 	valid_set = (d[validation_divide:][:], numpy.asarray(l[validation_divide:]))
 
 	train_file_count=parser.getint('config', 'train_file_count')
 	for i in range(1,train_file_count):
 		d=serial.load(parser.get('config', 'train_file_'+str(i)))
-		#dnet=numpy.vstack((dnet,d[:validation_divide][:]))
-		#lnet=lnet+l[:validation_divide]
-		dnet=numpy.vstack((dnet,d))
-		lnet=lnet+l
+		if validation_train:
+			dnet=numpy.vstack((dnet,d))
+			lnet=lnet+l
+		else:
+			dnet=numpy.vstack((dnet,d[:validation_divide][:]))
+			lnet=lnet+l[:validation_divide]
 	
 	train_set = (dnet, numpy.asarray(lnet))
 
