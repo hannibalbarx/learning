@@ -206,7 +206,7 @@ class LeNetConvLayer(object):
         # store parameters of this layer
         self.params = [self.W]
 
-def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns,
+def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns, hnn,
 	epoch_data = None, best_data = None,
 	n_epochs=250, batch_size=100):
 
@@ -260,8 +260,6 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 	    epoch = epoch_data[1]
 	    learning_rate = epoch_data[2]
 	    net_run_time = epoch_data[3]
-	    print('Loaded epoch %i model obtained after run time of %.2fm'\
-		  %(epoch, (net_run_time) / 60.))
 	    m+='Loaded epoch %i model obtained after run time of %.2fm\n'\
 		  %(epoch, (net_run_time) / 60.)
 		  
@@ -270,8 +268,6 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 	    best_validation_loss = best_data[1]
 	    best_iter = best_data[2]
 	    test_score = best_data[3]
-	    print('Loaded previous epoch best validation score of %f%%\n\tobtained at iteration %i, '\
-		  'with test performance %f %%' % (best_validation_loss * 100., best_iter + 1, test_score * 100.))
 	    m+='Loaded previous epoch best validation score of %f%%\n\tobtained at iteration %i, '\
 		  'with test performance %f %%' % (best_validation_loss * 100., best_iter + 1, test_score * 100.)
     if messages:
@@ -308,14 +304,13 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # This will generate a matrix of shape (20,32*4*4) = (20,512)
     layer2_input = layer1_1.output.flatten(2)
 
-    hnn_1 = parser.getint('config', 'hnn_1')
 
     # construct a fully-connected sigmoidal layer
     layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 3 * 3,
-                         n_out=hnn_1, activation=T.tanh, W=W_2, b=b_2)
+                         n_out=hnn, activation=T.tanh, W=W_2, b=b_2)
 
     # classify the values of the fully-connected sigmoidal layer
-    layer3 = LogisticRegression(input=layer2.output, n_in=hnn_1, n_out=10, W=W_3, b=b_3)
+    layer3 = LogisticRegression(input=layer2.output, n_in=hnn, n_out=10, W=W_3, b=b_3)
 
     params = layer3.params + layer2.params + layer1_1.params +layer1.params + layer0.params
     L2 = 	(layer0.W**2).sum() + (layer1.W**2).sum() + (layer1_1.W**2).sum()\
@@ -397,17 +392,12 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 
 		m=""
                 # compute zero-one loss on train set
-                print('epoch %i, minibatch %i/%i\ntrain error %f %%' % \
-                      (epoch, minibatch_index + 1, n_train_batches, \
-                       (sum(train_losses_deque)/len(train_losses_deque)) * 100.))
 		m+='%i, %.4f' %(epoch, sum(train_losses_deque)/len(train_losses_deque))
 
                 # compute zero-one loss on validation set
                 validation_losses = [validate_model(i) for i
                                      in xrange(n_valid_batches)]
                 this_validation_loss = numpy.mean(validation_losses)
-                print('validation error %f %%' % \
-                      (this_validation_loss * 100.))
 		m+=', %.4f' % (this_validation_loss)
 		       
                 # if we got the best validation score until now
@@ -426,12 +416,11 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
                     # test it on the test set
                     test_losses = [test_model(i) for i in xrange(n_test_batches)]
                     test_score = numpy.mean(test_losses)
-                    print(('test error of best model %f %%') % 
-                          (test_score * 100.))
 		    m+=(', %.4f') % (test_score)
 		    f=open("best.pickle", "wb")
 		    cPickle.dump((best_params, best_validation_loss, best_iter, test_score), f)
 		    f.close()
+		print m
 		if messages:
 			raw_message = RawMessage()
 			raw_message.set_body(m)
@@ -456,7 +445,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     m+=('The code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((net_run_time+end_time - start_time) / 60.))
-    print(m)
+    print m
     if messages:
 	    raw_message = RawMessage()
 	    raw_message.set_body(m)
@@ -472,16 +461,20 @@ def load_data():
 	#############
 	# LOAD DATA #
 	#############
-	print 'loading training data'
 
 	# Load the datasets
 
+	print '... loading data'
+	
 	validation_train=parser.getboolean('config', 'validation_train')
 	validation_divide=parser.getint('config', 'validation_divide')
+	m="validation train:%s validation_divide:%d\n"%(validation_train, validation_divide)
 	f=open(parser.get('config', 'train_labels'))
+	m+="training labels file:%s\n"%parser.get('config', 'train_labels')
 	l=cPickle.load(f)
 	f.close()
 	d=serial.load(parser.get('config', 'train_file_1'))
+	m+="data file:%s\n"%parser.get('config', 'train_file_1')
 	if validation_train:
 		dnet=d
 		lnet=l
@@ -492,8 +485,9 @@ def load_data():
 	valid_set = (d[validation_divide:][:], numpy.asarray(l[validation_divide:]))
 
 	train_file_count=parser.getint('config', 'train_file_count')
-	for i in range(1,train_file_count):
+	for i in range(2,train_file_count+1):
 		d=serial.load(parser.get('config', 'train_file_'+str(i)))
+		m+="data file:%s\n"%parser.get('config', 'train_file_'+str(i))
 		if validation_train:
 			dnet=numpy.vstack((dnet,d))
 			lnet=lnet+l
@@ -503,13 +497,12 @@ def load_data():
 	
 	train_set = (dnet, numpy.asarray(lnet))
 
-	print 'loaded training and validation data'
-
-	print 'loading test data...'
 	f=open(parser.get('config', 'test_labels'))
 	l = cPickle.load(f)
 	f.close();
+	m+="test labels file:%s\n"%parser.get('config', 'test_labels')
 	d=serial.load(parser.get('config', 'test_file'))
+	m+="test data file:%s\n"%parser.get('config', 'test_file')
 	test_set = (d, numpy.asarray(l))
 
 	def shared_dataset(data_xy, borrow=True):
@@ -528,7 +521,13 @@ def load_data():
 
 	rval = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
 	    (test_set_x, test_set_y)]
-	print 'all data now loaded. let the games begin.'
+
+	print m
+	if messages:
+		raw_message = RawMessage()
+		raw_message.set_body(m)
+		queue.write(raw_message)
+
 	return rval
 
 if __name__ == '__main__':
@@ -549,6 +548,7 @@ if __name__ == '__main__':
 		nkerns+=[parser.getint('config', 'nkerns_'+str(i))]
 	n_epochs=parser.getint('config', 'n_epochs')
 	batch_size=parser.getint('config', 'batch_size')
+        hnn = parser.getint('config', 'hnn_1')
 	
 	m="Greetings. Hydra is now online.\n"
 	m+="Config:\n"
@@ -557,6 +557,7 @@ if __name__ == '__main__':
 	m+="kernels: "
 	for k in range(0,len(nkerns)):
 		m+=str(nkerns[k])+" "
+	m+="hnn: %i\n"%hnn
 	m+="\nbatch size: %i\n"%batch_size
 	m+="epochs: %i\n"%n_epochs
 
@@ -568,21 +569,19 @@ if __name__ == '__main__':
 			f=open("epoch.pickle")
 			epoch_data = cPickle.load(f)
 			f.close()
-			print 'loaded last model configuration from previous epoch'
 			m+='\nloaded last model configuration from previous epoch'
 		if os.path.isfile("best.pickle"):
 			f=open("best.pickle")
 			best_data = cPickle.load(f)
 			f.close()
-			print 'loaded best model configuration for previous epoch'
 			m+='\nloaded best model configuration for previous epoch'
 
+	print m
 	if messages:
 		raw_message = RawMessage()
 		raw_message.set_body(m)
 		queue.write(raw_message)
-		
-		
-	evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns,
+	
+	evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns, hnn,
 		epoch_data, best_data,
 		n_epochs, batch_size)
