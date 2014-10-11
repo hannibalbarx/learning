@@ -47,8 +47,7 @@ from logistic_sgd import LogisticRegression
 
 import numpy.linalg
 
-from boto.sqs.message import RawMessage
-import boto.sqs
+import sqs_helper
 
 from random import random
 from ConfigParser import SafeConfigParser
@@ -58,9 +57,7 @@ parser.read('config.ini')
 if parser.getboolean('config', 'exit'):
 	print 'why you no love me? bye.'
 	exit()
-messages=parser.getboolean('config', 'messages')
 cuda=parser.getboolean('config', 'cuda')
-queue = None
 
 class LeNetConvPoolLayer(object):
     """Pool Layer of a convolutional network """
@@ -270,11 +267,8 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 	    test_score = best_data[3]
 	    m+='Loaded previous epoch best validation score of %f%%\n\tobtained at iteration %i, '\
 		  'with test performance %f %%' % (best_validation_loss * 100., best_iter + 1, test_score * 100.)
-    if messages:
-	    if m!="":
-		raw_message = RawMessage()
-		raw_message.set_body(m)
-		queue.write(raw_message)
+    if m!="":
+	sqs_helper.send_message(m)
 	
     # Reshape matrix of rasterized images of shape (batch_size,28*28)
     # to a 4D tensor, compatible with our LeNetConvPoolLayer
@@ -420,11 +414,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 		    f=open("best.pickle", "wb")
 		    cPickle.dump((best_params, best_validation_loss, best_iter, test_score), f)
 		    f.close()
-		print m
-		if messages:
-			raw_message = RawMessage()
-			raw_message.set_body(m)
-			queue.write(raw_message)
+		    sqs_helper.send_message(m)
 
             if  (train_losses<0.01): #(patience <= iter)
                 done_looping = True
@@ -445,11 +435,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     m+=('The code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((net_run_time+end_time - start_time) / 60.))
-    print m
-    if messages:
-	    raw_message = RawMessage()
-	    raw_message.set_body(m)
-	    queue.write(raw_message)    
+    sqs_helper.send_message(m)
 
 def load_data():
 	''' Loads the dataset
@@ -522,22 +508,12 @@ def load_data():
 	rval = [(train_set_x, train_set_y), (valid_set_x, valid_set_y),
 	    (test_set_x, test_set_y)]
 
-	print m
-	if messages:
-		raw_message = RawMessage()
-		raw_message.set_body(m)
-		queue.write(raw_message)
+	sqs_helper.send_message(m)
 
 	return rval
 
 if __name__ == '__main__':
 
-	if messages:
-		conn = boto.sqs.connect_to_region(
-			"us-east-1")
-		queue = conn.get_queue('LearningMessages')
-		print 'connected to messaging queue'
-	
 	initial_learning_rate=parser.getfloat('config', 'initial_learning_rate')
 	learning_decay=parser.getfloat('config', 'learning_decay')
 	learning_rate_min=parser.getfloat('config', 'learning_rate_min')
@@ -563,12 +539,13 @@ if __name__ == '__main__':
 
 	epoch_data = None
 	best_data = None
-	
+
 	if parser.getboolean('config', 'resume'):
 		if os.path.isfile("epoch.pickle"):
 			f=open("epoch.pickle")
 			epoch_data = cPickle.load(f)
 			f.close()
+			sqs_helper.connect_queue()
 			m+='\nloaded last model configuration from previous epoch'
 		if os.path.isfile("best.pickle"):
 			f=open("best.pickle")
@@ -576,11 +553,9 @@ if __name__ == '__main__':
 			f.close()
 			m+='\nloaded best model configuration for previous epoch'
 
-	print m
-	if messages:
-		raw_message = RawMessage()
-		raw_message.set_body(m)
-		queue.write(raw_message)
+	if not sqs_helper.connected():
+			sqs_helper.create_queue()	
+	sqs_helper.send_message(m)
 	
 	evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, lambada, nkerns, hnn,
 		epoch_data, best_data,
