@@ -270,16 +270,18 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     if m!="":
 	sqs_helper.send_message(m)
 	
+    cutter=theano.shared(numpy.int32(0))
+    update_cutter = theano.function([], updates=[(cutter, T.mod(cutter+1,25))])
     # Reshape matrix of rasterized images of shape (batch_size,28*28)
     # to a 4D tensor, compatible with our LeNetConvPoolLayer
-    layer0_input = x.reshape((batch_size, 3, 32, 32))
+    layer0_input = x.reshape((batch_size, 3, 32, 32))[:,:,cutter%5:28+cutter%5,cutter/5:28+cutter/5]
 
     # Construct the first convolutional pooling layer:
     # filtering reduces the image size to (28-5+1,28-5+1)=(24,24)
     # maxpooling reduces this further to (24/2,24/2) = (12,12)
     # 4D output tensor is thus of shape (batch_size,nkerns[0],12,12)
     layer0 = LeNetConvPoolLayer(rng, input=layer0_input,
-            image_shape=(batch_size, 3, 32, 32),
+            image_shape=(batch_size, 3, 28, 28),
             filter_shape=(nkerns[0], 3, 3, 3), poolsize=(2, 2), W=W_0, b=b_0)
 
     # Construct the second convolutional pooling layer
@@ -287,11 +289,11 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # maxpooling reduces this further to (8/2,8/2) = (4,4)
     # 4D output tensor is thus of shape (nkerns[0],nkerns[1],4,4)
     layer1 = LeNetConvPoolLayer(rng, input=layer0.output,
-            image_shape=(batch_size, nkerns[0], 15, 15),
+            image_shape=(batch_size, nkerns[0], 13, 13),
             filter_shape=(nkerns[1], nkerns[0], 2, 2), poolsize=(2, 2), W=W_1, b=b_1)
     layer1_1 = LeNetConvPoolLayer(rng, input=layer1.output,
-            image_shape=(batch_size, nkerns[1], 7, 7),
-            filter_shape=(nkerns[2], nkerns[1], 2, 2), poolsize=(2, 2), W=W_1_1, b=b_1_1)
+            image_shape=(batch_size, nkerns[1], 6, 6),
+            filter_shape=(nkerns[2], nkerns[1], 3, 3), poolsize=(2, 2), W=W_1_1, b=b_1_1)
 
     # the HiddenLayer being fully-connected, it operates on 2D matrices of
     # shape (batch_size,num_pixels) (i.e matrix of rasterized images).
@@ -300,7 +302,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 
 
     # construct a fully-connected sigmoidal layer
-    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 3 * 3,
+    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 2 * 2,
                          n_out=hnn, activation=T.tanh, W=W_2, b=b_2)
 
     # classify the values of the fully-connected sigmoidal layer
@@ -318,7 +320,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     cost = layer3.negative_log_likelihood(y) + lambada*L2
 
     train_errors = layer3.errors(y)
-    
+
     # create a function to compute the mistakes that are made by the model
     test_model = theano.function([index], layer3.errors(y),
              givens={
@@ -341,7 +343,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     updates = []
     for param_i, grad_i in zip(params, grads):
         updates.append((param_i, param_i - learning_rate * grad_i))
-
+    
     train_model = theano.function([index], (cost, train_errors), updates=updates,
           givens={
             x: train_set_x[index * batch_size: (index + 1) * batch_size],
@@ -378,6 +380,8 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 
             if iter % 100 == 0:
                 print 'training @ iter = ', iter
+
+	    update_cutter()
             (cost_ij, train_losses) = train_model(minibatch_index)
 	    
 	    train_losses_deque.append(train_losses)
