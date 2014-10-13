@@ -353,17 +353,8 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # TRAIN MODEL #
     ###############
     print '... training'
-    # early-stopping parameters
-    patience = 10000  # look as this many examples regardless
-    patience_increase = 2  # wait this much longer when a new best is
-                           # found
-    improvement_threshold = 0.995  # a relative improvement of this much is
-                                   # considered significant
-    validation_frequency = min(n_train_batches, patience / 2)
-                                  # go through this many
-                                  # minibatche before checking the network
-                                  # on the validation set; in this case we
-                                  # check every epoch
+
+    validation_frequency = n_train_batches
 
     start_time = time.clock()
 
@@ -402,11 +393,6 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
                 # if we got the best validation score until now
                 if this_validation_loss < best_validation_loss:
 
-                    #improve patience if loss improvement is good enough
-                    if this_validation_loss < best_validation_loss *  \
-                       improvement_threshold:
-                        patience = max(patience, iter * patience_increase)
-
                     # save best validation score and iteration number
                     best_validation_loss = this_validation_loss
                     best_iter = iter
@@ -421,7 +407,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 		    f.close()
 		    sqs_helper.send_message(m)
 
-            if  (net_train_losses <0.01): #(patience <= iter)
+            if  (net_train_losses <0.01):
                 done_looping = True
                 break
 	
