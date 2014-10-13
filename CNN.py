@@ -385,12 +385,13 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
             (cost_ij, train_losses) = train_model(minibatch_index)
 	    
 	    train_losses_deque.append(train_losses)
+	    net_train_losses = sum(train_losses_deque)/len(train_losses_deque)
 
             if (iter + 1) % validation_frequency == 0:
 
 		m=""
                 # compute zero-one loss on train set
-		m+='%i, %.4f' %(epoch, sum(train_losses_deque)/len(train_losses_deque))
+		m+='%i, %.4f' %(epoch, net_train_losses)
 
                 # compute zero-one loss on validation set
                 validation_losses = [validate_model(i) for i
@@ -420,7 +421,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 		    f.close()
 		    sqs_helper.send_message(m)
 
-            if  (train_losses<0.01): #(patience <= iter)
+            if  (net_train_losses <0.01): #(patience <= iter)
                 done_looping = True
                 break
 	
