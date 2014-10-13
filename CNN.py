@@ -405,7 +405,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 		    f=open("best.pickle", "wb")
 		    cPickle.dump((best_params, best_validation_loss, best_iter, test_score), f)
 		    f.close()
-		    sqs_helper.send_message(m)
+		sqs_helper.send_message(m)
 
             if  (net_train_losses <0.01):
                 done_looping = True
