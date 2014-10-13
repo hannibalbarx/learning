@@ -290,10 +290,10 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
     # 4D output tensor is thus of shape (nkerns[0],nkerns[1],4,4)
     layer1 = LeNetConvPoolLayer(rng, input=layer0.output,
             image_shape=(batch_size, nkerns[0], 14, 14),
-            filter_shape=(nkerns[1], nkerns[0], 2, 2), poolsize=(2, 2), W=W_1, b=b_1)
+            filter_shape=(nkerns[1], nkerns[0], 3, 3), poolsize=(2, 2), W=W_1, b=b_1)
     layer1_1 = LeNetConvPoolLayer(rng, input=layer1.output,
-            image_shape=(batch_size, nkerns[1], 7, 7),
-            filter_shape=(nkerns[2], nkerns[1], 2, 2), poolsize=(2, 2), W=W_1_1, b=b_1_1)
+            image_shape=(batch_size, nkerns[1], 6, 6),
+            filter_shape=(nkerns[2], nkerns[1], 3, 3), poolsize=(2, 2), W=W_1_1, b=b_1_1)
 
     # the HiddenLayer being fully-connected, it operates on 2D matrices of
     # shape (batch_size,num_pixels) (i.e matrix of rasterized images).
@@ -302,7 +302,7 @@ def evaluate_lenet5(initial_learning_rate, learning_decay, learning_rate_min, la
 
 
     # construct a fully-connected sigmoidal layer
-    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 3 * 3,
+    layer2 = HiddenLayer(rng, input=layer2_input, n_in=nkerns[2] * 2 * 2,
                          n_out=hnn, activation=T.tanh, W=W_2, b=b_2)
 
     # classify the values of the fully-connected sigmoidal layer
