@@ -282,7 +282,7 @@ def evaluate_lenet5(lambada, nkerns, hnn,
     for j in range(batch_size):
 	test_out_file.write("%s"%test_losses[1][j])
 	for i in range(10):
-		test_out_file.write(",%s"%test_losses[2][j][i])
+		test_out_file.write(",%.10f"%test_losses[2][j][i])
 	test_out_file.write("\n")
     test_out_file.close()
 
