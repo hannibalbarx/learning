@@ -208,7 +208,7 @@ def evaluate_lenet5(lambada, nkerns, hnn,
     datasets = load_data()
 
     test_set_x, test_set_y = datasets[0]
-    batch_size=10
+    batch_size=len(test_set_x.get_value())
 
     x = T.matrix('x')   # the data is presented as rasterized images
     y = T.ivector('y')  # the labels are presented as 1D vector of
@@ -279,8 +279,11 @@ def evaluate_lenet5(lambada, nkerns, hnn,
     
     test_losses = test_model()
     test_out_file = open("test_out_file.txt","wb")
-    for j in test_losses[1]:
-	test_out_file.write("%s\n"%j)
+    for j in range(batch_size):
+	test_out_file.write("%s"%test_losses[1][j])
+	for i in range(10):
+		test_out_file.write(",%s"%test_losses[2][j][i])
+	test_out_file.write("\n")
     test_out_file.close()
 
 def load_data():

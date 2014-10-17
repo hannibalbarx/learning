@@ -135,7 +135,7 @@ class LogisticRegression(object):
         if y.dtype.startswith('int'):
             # the T.neq operator returns a vector of 0s and 1s, where 1
             # represents a mistake in prediction
-            return (T.mean(T.neq(self.y_pred, y)), self.y_pred)
+            return (T.mean(T.neq(self.y_pred, y)), self.y_pred, self.p_y_given_x)
         else:
             raise NotImplementedError()
 
